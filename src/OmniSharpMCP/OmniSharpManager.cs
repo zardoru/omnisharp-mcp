@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace OmniSharpMCP;
 
@@ -333,8 +334,8 @@ public class OmniSharpManager : IDisposable
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                    if (content.Contains("\"Ready\":true", StringComparison.OrdinalIgnoreCase) ||
-                        content.Contains("\"ready\":true", StringComparison.OrdinalIgnoreCase))
+                    using var document = JsonDocument.Parse(content);
+                    if (OmniSharpClient.IsReadyStatus(document.RootElement))
                     {
                         return;
                     }
@@ -347,6 +348,10 @@ public class OmniSharpManager : IDisposable
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // Timeout, retry
+            }
+            catch (JsonException)
+            {
+                // Server returned a non-JSON response while starting; retry.
             }
 
             await Task.Delay(pollInterval, cancellationToken);

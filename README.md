@@ -300,7 +300,7 @@ OmniSharp may still be loading. Check status:
 curl -X POST http://localhost:2050/checkreadystatus -d '{}'
 ```
 
-If it returns `{"Ready":false}`, wait for OmniSharp to finish loading.
+If it returns `false`, wait for OmniSharp to finish loading. A ready server returns `true`.
 
 ### OmniSharp won't start
 

@@ -33,13 +33,41 @@ public class OmniSharpClient : IDisposable
     {
         try
         {
-            var response = await PostAsync<CheckReadyStatusResponse>("/checkreadystatus", new { });
-            return response?.Ready ?? false;
+            var response = await PostAsync<JsonElement>("/checkreadystatus", new { });
+            return IsReadyStatus(response);
         }
         catch
         {
             return false;
         }
+    }
+
+    internal static bool IsReadyStatus(JsonElement response)
+    {
+        if (response.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return response.GetBoolean();
+        }
+
+        if (response.ValueKind == JsonValueKind.String &&
+            bool.TryParse(response.GetString(), out var stringValue))
+        {
+            return stringValue;
+        }
+
+        if (response.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in response.EnumerateObject())
+            {
+                if (property.Name.Equals("Ready", StringComparison.OrdinalIgnoreCase) &&
+                    property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                {
+                    return property.Value.GetBoolean();
+                }
+            }
+        }
+
+        return false;
     }
 
     public async Task<FindUsagesResponse?> FindUsagesAsync(string filePath, int line, int column, bool excludeDefinition = false)

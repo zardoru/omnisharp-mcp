@@ -15,7 +15,7 @@ if [ -z "$SOLUTION_PATH" ]; then
 fi
 
 # Check if already running
-if curl -s -X POST "http://localhost:$PORT/checkreadystatus" -d '{}' 2>/dev/null | grep -q '"Ready":true'; then
+if curl -s -X POST "http://localhost:$PORT/checkreadystatus" -d '{}' 2>/dev/null | grep -Eq '(^true$|"[Rr]eady"[[:space:]]*:[[:space:]]*true)'; then
     echo "OmniSharp is already running and ready on port $PORT"
     exit 0
 fi
@@ -39,7 +39,7 @@ echo "Waiting for OmniSharp to become ready..."
 
 # Wait for ready (up to 3 minutes)
 for i in {1..180}; do
-    if curl -s -X POST "http://localhost:$PORT/checkreadystatus" -d '{}' 2>/dev/null | grep -q '"Ready":true'; then
+    if curl -s -X POST "http://localhost:$PORT/checkreadystatus" -d '{}' 2>/dev/null | grep -Eq '(^true$|"[Rr]eady"[[:space:]]*:[[:space:]]*true)'; then
         echo "OmniSharp is ready!"
         exit 0
     fi

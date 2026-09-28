@@ -24,6 +24,7 @@ function Test-OmniSharpReady {
         $result = Invoke-RestMethod -Method Post `
             -Uri "http://localhost:$TargetPort/checkreadystatus" `
             -ContentType 'application/json' -Body '{}' -TimeoutSec 3
+        if ($result -is [bool]) { return $result }
         return ($result.Ready -eq $true)
     }
     catch {
