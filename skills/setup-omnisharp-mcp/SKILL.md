@@ -1,73 +1,30 @@
 ---
 name: setup-omnisharp-mcp
-description: >
-  This skill should be used when the user asks to "setup C# MCP",
-  "configure OmniSharp", "setup the .sln server", or when the C# MCP
-  server fails to start because dotnet is not found or no .sln file
-  was detected.
+description: Configure the OmniSharp C# MCP server for a Codex project when the user asks to set up OmniSharp, C# language intelligence, Roslyn refactorings, or this repository's MCP server.
 ---
 
-Set up the omnisharp-mcp server for this project. Follow these steps in order, stopping early if any step fails.
+# Set up OmniSharp MCP for Codex
 
-## Step 1 -- Find the .sln file
+Configure the target repository without removing or replacing its existing MCP servers.
 
-Search for `**/*.sln` in the current working directory.
+1. Resolve the target project directory from the user's request, or use the current working directory.
+2. Find `.sln` files beneath that directory. If none exist, report that OmniSharp requires a solution and stop. If multiple exist and the intended one is not clear from repository guidance, ask which to use.
+3. Resolve `dotnet` to an absolute executable path when possible. This MCP targets .NET 10; verify an SDK 10 or newer is available.
+4. Locate a current published `OmniSharpMCP.dll`. Prefer the `publish` directory belonging to this skill's plugin or repository. If the source repository is available but the DLL is absent or stale, run its platform bootstrap or `dotnet publish` before configuration.
+5. Update `<project>/.codex/config.toml`, preserving unrelated settings and MCP entries. Add or update:
 
-- If **multiple** `.sln` files are found, ask the user which one to use.
-- If **none** are found, tell the user: "No .sln file found in this project. The C# MCP server requires a Visual Studio solution file." Then **stop**.
+   ```toml
+   [mcp_servers.csharp]
+   command = '<absolute-dotnet-path>'
+   args = ['<absolute-OmniSharpMCP.dll-path>']
 
-Store the **absolute path** to the chosen `.sln` file for later.
+   [mcp_servers.csharp.env]
+   OMNISHARP_SOLUTION = '<absolute-sln-path>'
+   OMNISHARP_PORT = '2050'
+   ```
 
-## Step 2 -- Find the dotnet runtime
+   TOML literal strings are convenient for Windows paths because backslashes do not need escaping. Use a different free port only when `2050` is already assigned to another service.
+6. Validate the TOML and confirm the configured files exist. When practical, run `codex mcp list` from the target project. Do not start an additional long-lived OmniSharp process merely to validate configuration.
+7. Tell the user which solution, DLL, runtime, and port were configured. Explain that a new Codex session may be required to load the new MCP server.
 
-Check platform-specific paths in order, stopping at the first one that exists.
-
-**macOS:**
-- `/usr/local/share/dotnet/dotnet`
-- `/opt/homebrew/bin/dotnet`
-
-**Linux:**
-- `/usr/share/dotnet/dotnet`
-- `/snap/dotnet-sdk/current/dotnet`
-- `$HOME/.dotnet/dotnet`
-
-**Windows:**
-- `C:\Program Files\dotnet\dotnet.exe`
-- `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`
-
-**Fallback (all platforms):** run `which dotnet` (or `where dotnet` on Windows).
-
-If an absolute path is found, store it for later.
-
-If dotnet is not found anywhere, fall back to plain `dotnet` and warn the user:
-"dotnet was not found at any known location. Falling back to `dotnet` and assuming it is on your PATH. If the MCP server fails to start, install the .NET SDK from https://dotnet.microsoft.com/download and ensure `dotnet` is on your PATH."
-
-## Step 3 -- Find the plugin DLL
-
-Search for the OmniSharpMCP.dll inside the plugin cache:
-
-```
-~/.claude/plugins/cache/beachbum-marketplace/omnisharp-mcp/*/publish/OmniSharpMCP.dll
-```
-
-If the DLL is not found, tell the user:
-"Could not find OmniSharpMCP.dll. The omnisharp-mcp plugin may not be installed correctly. Try reinstalling the plugin."
-Then **stop**.
-
-Store the **absolute path** to the DLL for later.
-
-## Step 4 -- Register the MCP server
-
-Run the following command, substituting the actual absolute paths found in the previous steps:
-
-```
-claude mcp add -s project -e OMNISHARP_SOLUTION=<absolute-sln-path> -- csharp <dotnet-path-or-dotnet> <absolute-dll-path>
-```
-
-Where `<dotnet-path-or-dotnet>` is the absolute path found in Step 2, or plain `dotnet` if no absolute path was found.
-
-If the command fails, show the error to the user and **stop**.
-
-## Step 5 -- Confirm
-
-Tell the user: "The C# MCP server is now configured for this project. Please restart Claude Code to activate the new MCP server."
+Do not write Claude-specific configuration unless the user explicitly asks for Claude Code support.
