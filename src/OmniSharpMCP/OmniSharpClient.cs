@@ -171,6 +171,46 @@ public class OmniSharpClient : IDisposable
         return await PostAsync<RenameResponse>("/rename", request);
     }
 
+    public async Task<GetCodeActionsResponse?> GetCodeActionsAsync(
+        string filePath, int line, int column, int endLine, int endColumn)
+    {
+        var request = CreateCodeActionRequest(filePath, line, column, endLine, endColumn);
+        return await PostAsync<GetCodeActionsResponse>("/v2/getcodeactions", request);
+    }
+
+    public async Task<RunCodeActionResponse?> RunCodeActionAsync(
+        string filePath, int line, int column, int endLine, int endColumn,
+        string identifier, bool applyChanges)
+    {
+        var request = new RunCodeActionRequest
+        {
+            FileName = filePath,
+            Line = line,
+            Column = column,
+            Selection = CreateRange(line, column, endLine, endColumn),
+            Identifier = identifier,
+            WantsTextChanges = true,
+            ApplyTextChanges = applyChanges,
+            WantsAllCodeActionOperations = true
+        };
+        return await PostAsync<RunCodeActionResponse>("/v2/runcodeaction", request);
+    }
+
+    private static CodeActionRequest CreateCodeActionRequest(
+        string filePath, int line, int column, int endLine, int endColumn) => new()
+    {
+        FileName = filePath,
+        Line = line,
+        Column = column,
+        Selection = CreateRange(line, column, endLine, endColumn)
+    };
+
+    private static Models.Range CreateRange(int line, int column, int endLine, int endColumn) => new()
+    {
+        Start = new Position { Line = line, Column = column },
+        End = new Position { Line = endLine, Column = endColumn }
+    };
+
     public async Task<WorkspaceInfoResponse?> GetWorkspaceInfoAsync()
     {
         return await PostAsync<WorkspaceInfoResponse>("/projects", new { });

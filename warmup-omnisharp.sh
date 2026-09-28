@@ -1,10 +1,18 @@
 #!/bin/bash
 # Warmup script - starts OmniSharp and waits until it's ready
-# Run this before starting Claude Code for instant tool availability
+# Run this before starting your MCP client for instant tool availability
 
-SOLUTION_PATH="${OMNISHARP_SOLUTION:-/Users/omersomekhbeachbum/dev/rummystars-client/rummystars-client.sln}"
+SOLUTION_PATH="${OMNISHARP_SOLUTION:-}"
+if [ -z "$SOLUTION_PATH" ]; then
+    SOLUTION_PATH="$(find . -maxdepth 1 -type f -name '*.sln' -print -quit)"
+fi
 PORT="${OMNISHARP_PORT:-2050}"
-OMNISHARP_DLL="$HOME/.omnisharp-mcp/omnisharp/OmniSharp.dll"
+OMNISHARP_DLL="${OMNISHARP_PATH:-$HOME/.omnisharp-mcp/omnisharp/OmniSharp.dll}"
+
+if [ -z "$SOLUTION_PATH" ]; then
+    echo "Set OMNISHARP_SOLUTION or run this script from a directory containing a .sln file."
+    exit 1
+fi
 
 # Check if already running
 if curl -s -X POST "http://localhost:$PORT/checkreadystatus" -d '{}' 2>/dev/null | grep -q '"Ready":true'; then
@@ -23,7 +31,7 @@ echo "Starting OmniSharp for solution: $SOLUTION_PATH"
 echo "Port: $PORT"
 
 # Start OmniSharp in background
-nohup dotnet "$OMNISHARP_DLL" -s "$SOLUTION_PATH" -p $PORT --hostPID $$ --encoding utf-8 > /tmp/omnisharp.log 2>&1 &
+nohup dotnet "$OMNISHARP_DLL" -s "$SOLUTION_PATH" -p "$PORT" --encoding utf-8 > /tmp/omnisharp.log 2>&1 &
 OMNISHARP_PID=$!
 
 echo "OmniSharp started (PID: $OMNISHARP_PID)"

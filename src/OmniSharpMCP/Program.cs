@@ -33,11 +33,6 @@ if (string.IsNullOrEmpty(solutionPath))
 
 if (string.IsNullOrEmpty(solutionPath))
 {
-    solutionPath = TryResolveFromClaudePlugins();
-}
-
-if (string.IsNullOrEmpty(solutionPath))
-{
     // Auto-detect: find .sln files in current working directory
     var slnFiles = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.sln");
     if (slnFiles.Length == 1)
@@ -47,28 +42,31 @@ if (string.IsNullOrEmpty(solutionPath))
     }
     else if (slnFiles.Length > 1)
     {
-        Console.Error.WriteLine("Error: Multiple .sln files found. Set OMNISHARP_SOLUTION to pick one.");
+        Console.Error.WriteLine("[OmniSharpMCP] Multiple .sln files found; use initialize_workspace to pick one:");
         foreach (var sln in slnFiles)
         {
             Console.Error.WriteLine($"  - {sln}");
         }
-        Environment.Exit(1);
     }
     else
     {
-        Console.Error.WriteLine("Error: No .sln file found in current directory.");
-        Console.Error.WriteLine("Set OMNISHARP_SOLUTION environment variable or run from a directory with a .sln file.");
-        Environment.Exit(1);
+        // Keep the MCP server available so a client can initialize it dynamically.
+        solutionPath = TryResolveFromLegacyClaudePlugins();
+        if (string.IsNullOrEmpty(solutionPath))
+        {
+            Console.Error.WriteLine(
+                "[OmniSharpMCP] No solution configured. Call initialize_workspace or set OMNISHARP_SOLUTION.");
+        }
     }
 }
 
-if (!File.Exists(solutionPath))
+if (!string.IsNullOrEmpty(solutionPath) && !File.Exists(solutionPath))
 {
-    Console.Error.WriteLine($"Error: Solution file not found: {solutionPath}");
-    Environment.Exit(1);
+    Console.Error.WriteLine($"[OmniSharpMCP] Configured solution not found: {solutionPath}");
+    solutionPath = null;
 }
 
-Console.Error.WriteLine($"[OmniSharpMCP] Solution: {solutionPath}");
+Console.Error.WriteLine($"[OmniSharpMCP] Solution: {solutionPath ?? "not initialized"}");
 Console.Error.WriteLine($"[OmniSharpMCP] OmniSharp port: {port}");
 
 // Create OmniSharp manager and client
@@ -103,6 +101,11 @@ lifetime.ApplicationStarted.Register(() =>
     {
         try
         {
+            if (string.IsNullOrEmpty(omnisharpManager.SolutionPath))
+            {
+                return;
+            }
+
             // Check if OmniSharp is already running
             if (await omnisharpClient.CheckReadyAsync())
             {
@@ -125,7 +128,9 @@ lifetime.ApplicationStarted.Register(() =>
 Console.Error.WriteLine("[OmniSharpMCP] MCP server starting...");
 await app.RunAsync();
 
-static string? TryResolveFromClaudePlugins()
+// Backward-compatible discovery for existing plugin installs. Generic MCP clients
+// normally use the current directory, OMNISHARP_SOLUTION, or initialize_workspace.
+static string? TryResolveFromLegacyClaudePlugins()
 {
     try
     {

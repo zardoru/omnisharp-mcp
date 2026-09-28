@@ -1,10 +1,10 @@
 # OmniSharp MCP Server
 
-A Model Context Protocol (MCP) server that provides C# language intelligence to Claude Code CLI by wrapping the OmniSharp language server.
+A Model Context Protocol (MCP) server that provides C# language intelligence to Codex and other MCP clients by wrapping the OmniSharp language server.
 
 ## What It Does
 
-This MCP server gives Claude Code full C# IDE capabilities:
+This MCP server gives MCP clients C# language and refactoring capabilities:
 
 - **Find Symbols** - Search for classes, methods, properties by name
 - **Go to Definition** - Jump to where a symbol is defined
@@ -15,15 +15,43 @@ This MCP server gives Claude Code full C# IDE capabilities:
 - **Code Completion** - Get autocomplete suggestions
 - **Signature Help** - Get method parameter hints
 - **Rename Preview** - Preview what a rename would change
+- **Code Actions** - Discover available refactorings and quick fixes, preview their changes, and apply a selected action
+- **Workspace Initialization** - Start OmniSharp and load the configured solution through an MCP tool
 - **Decompiled Source** - View decompiled .NET framework code
 
 ## Prerequisites
 
-- [.NET SDK 9.0+](https://dotnet.microsoft.com/download) installed
-- [Claude Code CLI](https://claude.ai/code) installed
+- [.NET SDK 10.0+](https://dotnet.microsoft.com/download) installed
+- An MCP-compatible client, such as [Codex](https://openai.com/codex/) or Claude Code
 - A C# solution file (`.sln`)
 
 ## Installation
+
+### Quick bootstrap
+
+The bootstrap scripts validate `dotnet`, locate the solution, restore and publish
+the MCP server, then start it over stdio. On its first start, the MCP server
+downloads the pinned OmniSharp HTTP release and starts it automatically.
+
+Windows PowerShell:
+
+```powershell
+./bootstrap-omnisharp-mcp.ps1 -SolutionPath C:\path\to\project.sln
+```
+
+Linux/macOS:
+
+```bash
+./bootstrap-omnisharp-mcp.sh --solution /path/to/project.sln
+```
+
+If the current directory contains exactly one `.sln`, the solution argument can
+be omitted. After the first build, use `-SkipBuild` or `--skip-build` for faster
+starts. The scripts also accept `OMNISHARP_SOLUTION` and `OMNISHARP_PORT`.
+
+The bootstrap script itself can be configured as the command of a stdio MCP
+server. Keep all status/build output on stderr so stdout remains reserved for
+the MCP protocol.
 
 ### 1. Clone and Build
 
@@ -33,11 +61,28 @@ cd omnisharp-mcp
 dotnet publish src/OmniSharpMCP/OmniSharpMCP.csproj -c Release -o publish
 ```
 
-### 2. Configure Claude Code
+### 2. Configure an MCP client
 
-Create and add the MCP server to your Claude Code configuration.
+Add the server to the MCP client's configuration. The examples below show Codex and Claude Code; other clients that support stdio MCP servers can use the same command and environment variables.
 
-**Which is needed Per-project**
+#### Codex
+
+Add an entry to `~/.codex/config.toml` (or the project's `.codex/config.toml`):
+
+```toml
+[mcp_servers.csharp]
+command = "dotnet"
+args = ["/path/to/omnisharp-mcp/publish/OmniSharpMCP.dll"]
+
+[mcp_servers.csharp.env]
+OMNISHARP_SOLUTION = "/path/to/your/project.sln"
+```
+
+Restart Codex or reload its MCP servers, then check that `csharp` is connected.
+
+#### Claude Code
+
+This configuration can be added per project.
 
 A. Create `.mcp.json` in your project root:
 
@@ -58,23 +103,23 @@ A. Create `.mcp.json` in your project root:
 
 B. Edit the .claude/mcp.json file args and env values.
 
-Example edited mcp.json file in my project:
+Example project configuration:
 ```json
 {
   "mcpServers": {
     "csharp": {
       "type": "stdio",
       "command": "dotnet",
-      "args": ["/Users/omersomekhbeachbum/dev/omnisharp-mcp/publish/OmniSharpMCP.dll"],
+      "args": ["/path/to/omnisharp-mcp/publish/OmniSharpMCP.dll"],
       "env": {
-        "OMNISHARP_SOLUTION": "/Users/omersomekhbeachbum/dev/rummystars-client/rummystars-client.sln"
+        "OMNISHARP_SOLUTION": "/path/to/your/project.sln"
       }
     }
   }
 }
 ```
 
-### 3. Enable the MCP Server
+### 3. Enable the MCP Server in Claude Code (if applicable)
 
 Create (if not already created) and edit `~/.claude/settings.local.json`:
 
@@ -85,16 +130,16 @@ Create (if not already created) and edit `~/.claude/settings.local.json`:
 }
 ```
 
-### 4. Restart Claude Code
+### 4. Restart the client
 
-The mcp will be able to start whenever all claude instances are closed.
+The MCP server starts when the client connects to it. For Claude Code, close its running instances before restarting if the server configuration changed.
 
-Start claude again:
+Start Claude Code again:
 ```bash
 claude
 ```
 
-Verify the server is connected:
+In Claude Code, verify the server is connected:
 
 ```
 /mcp
@@ -102,26 +147,29 @@ Verify the server is connected:
 
 You should see `csharp` in the list of connected servers.
 
-## Enable claude to use omnisharp-mcp tool
-This is done out of the box! No additional config here is needed.
-Whenever claude instance is running - he has all the tools, and you dont need to specify for his what tools to use. Based on the prompt the claude instance will decide what tools will serve him the best to get to the wanted result.
+Once connected, the MCP client can discover and call the server's tools. Some clients choose tools automatically based on the request; others let you call them directly.
 
 ## First Run
 
 On first run, the MCP server will:
 
-1. Start immediately (so Claude Code can connect)
-2. Download OmniSharp HTTP server (~50MB) to `~/.omnisharp-mcp/omnisharp/`
-3. Start OmniSharp and load your solution in the background
+1. Download OmniSharp HTTP server (~50MB) to `~/.omnisharp-mcp/omnisharp/` if it is not already installed
+2. Start OmniSharp and load your solution when the client connects or calls `initialize_workspace`
 
 **Note:** The first startup takes 2-3 minutes while OmniSharp loads your solution. Tools will return errors during this time. Subsequent startups are faster if OmniSharp is already running.
 
 ## Warming Up OmniSharp (Optional)
 
-To avoid waiting for OmniSharp to load, you can pre-start it:
+To avoid waiting for OmniSharp to load, you can pre-start it with the script for your platform. Set `OMNISHARP_SOLUTION` to the solution path when it is not in the current directory. Both scripts also honor `OMNISHARP_PORT` (default `2050`) and `OMNISHARP_PATH` (custom `OmniSharp.dll` path).
 
 ```bash
 ./warmup-omnisharp.sh
+```
+
+On Windows, run:
+
+```powershell
+./warmup-omnisharp.ps1
 ```
 
 This script:
@@ -174,7 +222,7 @@ launchctl load ~/Library/LaunchAgents/com.omnisharp.mcp.plist
 
 ## Available Tools
 
-Once connected, Claude Code has access to these tools:
+Once connected, MCP clients can discover and use these tools:
 
 | Tool | Description |
 |------|-------------|
@@ -189,12 +237,16 @@ Once connected, Claude Code has access to these tools:
 | `get_file_members` | Get outline of a file |
 | `get_workspace_info` | Get solution/project information |
 | `preview_rename` | Preview rename changes |
+| `get_code_actions` | List refactorings and quick fixes available at a file position or selection |
+| `preview_code_action` | Preview the edits from a selected code action without applying them |
+| `apply_code_action` | Apply a selected code action |
+| `initialize_workspace` | Ensure OmniSharp is started and the configured solution is loaded |
 | `get_decompiled_source` | Get decompiled metadata source |
 
 ## Architecture
 
 ```
-Claude Code CLI
+Codex, Claude Code, or another MCP client
       |
       | (stdio - JSON-RPC)
       v
@@ -210,9 +262,9 @@ Your C# Solution
 ```
 
 The MCP server acts as a bridge:
-- Receives tool calls from Claude Code via stdio
+- Receives tool calls from an MCP client via stdio
 - Translates them to HTTP requests to OmniSharp
-- Returns formatted responses back to Claude
+- Returns formatted responses to the MCP client
 
 ## Configuration
 
@@ -220,9 +272,11 @@ The MCP server acts as a bridge:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OMNISHARP_SOLUTION` | Path to your `.sln` file | Required |
+| `OMNISHARP_SOLUTION` | Path to your `.sln` file | Auto-detected or set with `initialize_workspace` |
 | `OMNISHARP_PORT` | OmniSharp HTTP port | `2050` |
 | `OMNISHARP_PATH` | Custom OmniSharp DLL path | Auto-download |
+
+The bundled downloader is pinned to OmniSharp `v1.39.15`.
 
 ### Command Line Arguments
 
@@ -234,9 +288,9 @@ dotnet OmniSharpMCP.dll --solution /path/to/solution.sln --port 2050
 
 ### MCP server fails to connect
 
-1. Check `/mcp` in Claude Code to see server status
-2. Verify the path in `mcp.json` is correct
-3. Ensure `settings.local.json` has `"csharp"` in `enabledMcpjsonServers`
+1. Check the MCP server status in your client (for Claude Code, use `/mcp`)
+2. Verify the server command and path in your client's MCP configuration
+3. For Claude Code, ensure `settings.local.json` has `"csharp"` in `enabledMcpjsonServers`
 
 ### Tools return errors
 

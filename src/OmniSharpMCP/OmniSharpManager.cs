@@ -12,11 +12,12 @@ public class OmniSharpManager : IDisposable
 {
     private Process? _omnisharpProcess;
     private readonly int _port;
-    private readonly string? _solutionPath;
+    private string? _solutionPath;
     private bool _isRunning;
     private readonly HttpClient _httpClient;
+    private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
 
-    private const string OmniSharpVersion = "v1.39.13";
+    private const string OmniSharpVersion = "v1.39.15";
     private static readonly string OmniSharpDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".omnisharp-mcp",
@@ -24,8 +25,9 @@ public class OmniSharpManager : IDisposable
 
     public bool IsRunning => _isRunning;
     public int Port => _port;
+    public string? SolutionPath => _solutionPath;
 
-    public OmniSharpManager(string solutionPath, int port = 2050)
+    public OmniSharpManager(string? solutionPath = null, int port = 2050)
     {
         _solutionPath = solutionPath;
         _port = port;
@@ -35,6 +37,12 @@ public class OmniSharpManager : IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrEmpty(_solutionPath))
+        {
+            throw new OmniSharpException(
+                "No solution has been configured. Call initialize_workspace with a .sln file or directory.");
+        }
+
         if (_isRunning)
         {
             return;
@@ -99,6 +107,37 @@ public class OmniSharpManager : IDisposable
         await WaitForServerReadyAsync(cancellationToken);
         _isRunning = true;
         Console.Error.WriteLine("[OmniSharpMCP] OmniSharp server is ready");
+    }
+
+    public async Task InitializeAsync(string solutionPath, CancellationToken cancellationToken = default)
+    {
+        var fullPath = Path.GetFullPath(solutionPath);
+        if (!File.Exists(fullPath) ||
+            !string.Equals(Path.GetExtension(fullPath), ".sln", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new FileNotFoundException("A valid Visual Studio .sln file is required.", fullPath);
+        }
+
+        await _lifecycleLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_isRunning && string.Equals(_solutionPath, fullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (_isRunning)
+            {
+                Stop();
+            }
+
+            _solutionPath = fullPath;
+            await StartAsync(cancellationToken);
+        }
+        finally
+        {
+            _lifecycleLock.Release();
+        }
     }
 
     private string BuildArguments(string omnisharpPath)
@@ -344,6 +383,7 @@ public class OmniSharpManager : IDisposable
     {
         Stop();
         _omnisharpProcess?.Dispose();
+        _lifecycleLock.Dispose();
         _httpClient.Dispose();
     }
 }

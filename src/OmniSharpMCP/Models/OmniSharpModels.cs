@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace OmniSharpMCP.Models;
@@ -509,4 +510,70 @@ public class MetadataResponse
 
     [JsonPropertyName("Source")]
     public string Source { get; set; } = string.Empty;
+}
+
+// Code actions / Roslyn refactorings (v2)
+public class CodeActionRequest : FilePositionRequest
+{
+    [JsonPropertyName("Selection")]
+    public Range Selection { get; set; } = new();
+}
+
+public class RunCodeActionRequest : CodeActionRequest
+{
+    [JsonPropertyName("Identifier")]
+    public string Identifier { get; set; } = string.Empty;
+
+    [JsonPropertyName("WantsTextChanges")]
+    public bool WantsTextChanges { get; set; } = true;
+
+    [JsonPropertyName("ApplyTextChanges")]
+    public bool ApplyTextChanges { get; set; }
+
+    [JsonPropertyName("WantsAllCodeActionOperations")]
+    public bool WantsAllCodeActionOperations { get; set; } = true;
+}
+
+public class GetCodeActionsResponse
+{
+    [JsonPropertyName("CodeActions")]
+    public List<OmniSharpCodeAction> CodeActions { get; set; } = new();
+}
+
+public class OmniSharpCodeAction
+{
+    [JsonPropertyName("Identifier")]
+    public string Identifier { get; set; } = string.Empty;
+
+    [JsonPropertyName("Name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("CodeActionKind")]
+    public string CodeActionKind { get; set; } = string.Empty;
+}
+
+public class RunCodeActionResponse
+{
+    [JsonPropertyName("Changes")]
+    public List<FileOperationResponse> Changes { get; set; } = new();
+}
+
+// The concrete response is polymorphic in OmniSharp. Keeping its union of
+// properties in one DTO lets System.Text.Json handle every operation type.
+public class FileOperationResponse
+{
+    [JsonPropertyName("FileName")]
+    public string FileName { get; set; } = string.Empty;
+
+    [JsonPropertyName("ModificationType")]
+    public JsonElement ModificationType { get; set; }
+
+    [JsonPropertyName("NewFileName")]
+    public string? NewFileName { get; set; }
+
+    [JsonPropertyName("Buffer")]
+    public string? Buffer { get; set; }
+
+    [JsonPropertyName("Changes")]
+    public List<LinePositionSpanTextChange>? Changes { get; set; }
 }
